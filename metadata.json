@@ -1,0 +1,6 @@
+{
+  "name": "RunFam — City-Based Social Running Platform",
+  "description": "City-based social running platform. Track your runs with GPS, join local Run Clubs, climb city leaderboards, and contribute distance to your crew and city.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

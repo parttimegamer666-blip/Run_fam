@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" width="100%" height="100%">
+  <defs>
+    <linearGradient id="iconLime" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8BF800" />
+      <stop offset="50%" stop-color="#72D600" />
+      <stop offset="100%" stop-color="#4EAB00" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(30, 20)">
+    <!-- Head -->
+    <circle cx="150" cy="40" r="24" fill="url(#iconLime)" />
+    <!-- Arm -->
+    <path d="M 166 90 C 180 90 198 100 198 107 C 198 114 180 122 166 122 Z" fill="url(#iconLime)" />
+    <!-- Upper Body loop -->
+    <path d="M 40 64 L 115 64 C 140 64 162 82 162 108 C 162 132 140 150 115 150 L 92 150 C 85 150 82 155 85 162 L 102 162 C 134 162 170 134 170 102 C 170 66 134 44 96 44 L 32 44 C 18 44 26 64 40 64 Z" fill="url(#iconLime)" />
+    <!-- Stride Slash -->
+    <path d="M 94 76 L 12 192 C 2 206 14 216 30 216 L 46 216 L 124 102 Z" fill="url(#iconLime)" />
+    <!-- Back Leg -->
+    <path d="M 92 154 C 82 154 78 162 86 170 L 114 200 C 122 208 118 218 102 224 L 80 224 C 104 234 132 220 138 204 L 118 174 C 110 162 104 154 92 154 Z" fill="url(#iconLime)" />
+  </g>
+</svg>
