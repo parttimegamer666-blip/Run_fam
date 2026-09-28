@@ -6,6 +6,8 @@
 
 import { GPSPoint } from '../types';
 import { haversineDistance } from './db';
+import { Geolocation } from '@capacitor/geolocation';
+import { nativePlatform } from './nativePlatform';
 
 export type GPSAccuracyStatus = 'searching' | 'ready' | 'good' | 'weak' | 'denied' | 'unavailable';
 
@@ -45,6 +47,7 @@ const CSN_SIMULATION_WAYPOINTS = [
 export class GPSTrackingEngine {
   private state: RunTrackerState;
   private watchId: number | null = null;
+  private nativeWatchId: string | null = null;
   private timerInterval: any = null;
   private simInterval: any = null;
   private simStep = 0;
@@ -115,7 +118,28 @@ export class GPSTrackingEngine {
   }
 
   // Request GPS status & permissions
-  public checkGPSAvailability(): Promise<GPSAccuracyStatus> {
+  public async checkGPSAvailability(): Promise<GPSAccuracyStatus> {
+    if (nativePlatform.isNative()) {
+      const perm = await nativePlatform.requestLocationPermissions();
+      if (!perm.granted) {
+        this.state.status = 'denied';
+        this.notify();
+        return 'denied';
+      }
+      try {
+        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000 });
+        const acc = pos.coords.accuracy;
+        this.state.accuracyMeters = Math.round(acc);
+        this.state.status = acc <= 15 ? 'ready' : acc <= 30 ? 'good' : 'weak';
+        this.notify();
+        return this.state.status;
+      } catch (err) {
+        this.state.status = 'weak';
+        this.notify();
+        return 'weak';
+      }
+    }
+
     return new Promise((resolve) => {
       if (!('geolocation' in navigator)) {
         this.state.status = 'unavailable';
@@ -158,6 +182,11 @@ export class GPSTrackingEngine {
       status: options?.simulated ? 'good' : 'searching',
     };
 
+    // Wake lock & persistent tracking notification
+    nativePlatform.acquireWakeLock();
+    nativePlatform.requestNotificationPermission();
+    nativePlatform.updateRunNotification(0, '--:--', '00:00');
+
     // Duration timer (every second)
     this.timerInterval = setInterval(() => {
       if (this.state.isActive && !this.state.isPaused) {
@@ -180,6 +209,59 @@ export class GPSTrackingEngine {
   }
 
   private startRealGPS() {
+    // 1. Native Capacitor Android GPS tracking
+    if (nativePlatform.isNative()) {
+      Geolocation.watchPosition(
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 2000,
+        },
+        (pos, err) => {
+          if (err) {
+            console.warn('Native Geolocation watch error:', err.message);
+            if (err.message?.toLowerCase().includes('denied')) {
+              this.state.status = 'denied';
+            } else {
+              this.state.status = 'weak';
+            }
+            this.notify();
+            return;
+          }
+
+          if (!pos || !this.state.isActive || this.state.isPaused) return;
+
+          const { latitude, longitude, altitude, accuracy, speed } = pos.coords;
+          this.state.accuracyMeters = Math.round(accuracy);
+          this.state.status = accuracy <= 15 ? 'good' : accuracy <= 35 ? 'ready' : 'weak';
+
+          // Discard inaccurate jitter (> 40 meters)
+          if (accuracy > 40 && this.state.points.length > 2) {
+            return;
+          }
+
+          const point: GPSPoint = {
+            latitude,
+            longitude,
+            altitude: altitude || 580,
+            accuracy,
+            speed: speed || 0,
+            timestamp: pos.timestamp || Date.now(),
+          };
+
+          this.processNewPoint(point);
+        }
+      ).then((id) => {
+        this.nativeWatchId = id;
+      }).catch((e) => {
+        console.warn('Failed to start native GPS watch:', e);
+        this.state.status = 'weak';
+        this.notify();
+      });
+      return;
+    }
+
+    // 2. Web Geolocation API fallback
     if (!('geolocation' in navigator)) {
       this.state.status = 'unavailable';
       this.notify();
@@ -313,11 +395,19 @@ export class GPSTrackingEngine {
     this.state.lastPoint = newPoint;
     this.state.points.push(newPoint);
     this.notify();
+
+    // Dispatch background notification update
+    nativePlatform.updateRunNotification(
+      this.state.distanceKm,
+      formatPace(this.state.currentPaceSecPerKm || this.state.avgPaceSecPerKm),
+      formatDuration(this.state.durationSeconds)
+    );
   }
 
   public pauseRun() {
     if (this.state.isActive) {
       this.state.isPaused = true;
+      nativePlatform.releaseWakeLock();
       this.notify();
     }
   }
@@ -325,6 +415,7 @@ export class GPSTrackingEngine {
   public resumeRun() {
     if (this.state.isActive && this.state.isPaused) {
       this.state.isPaused = false;
+      nativePlatform.acquireWakeLock();
       this.notify();
     }
   }
@@ -350,6 +441,10 @@ export class GPSTrackingEngine {
       navigator.geolocation.clearWatch(this.watchId);
       this.watchId = null;
     }
+    if (this.nativeWatchId !== null) {
+      Geolocation.clearWatch({ id: this.nativeWatchId });
+      this.nativeWatchId = null;
+    }
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
@@ -358,6 +453,9 @@ export class GPSTrackingEngine {
       clearInterval(this.simInterval);
       this.simInterval = null;
     }
+
+    nativePlatform.releaseWakeLock();
+    nativePlatform.clearRunNotification();
   }
 
   public getState(): RunTrackerState {

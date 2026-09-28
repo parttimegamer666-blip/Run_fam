@@ -29,6 +29,8 @@ import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { NotificationsModal } from './components/common/NotificationsModal';
 import { RunFamLogo } from './components/common/RunFamLogo';
 import { Sparkles, UserCheck, ShieldCheck, UserPlus, LogOut } from 'lucide-react';
+import { gpsEngine, RunTrackerState, formatDuration } from './services/gps';
+import { nativePlatform } from './services/nativePlatform';
 
 export default function App() {
   // Check active session from auth service
@@ -55,6 +57,68 @@ export default function App() {
   );
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState<boolean>(false);
+  const [activeRunState, setActiveRunState] = useState<RunTrackerState>(gpsEngine.getState());
+
+  // Initialize native platform capabilities & hardware back button handling
+  useEffect(() => {
+    // 1. Initialize native Android status bar and splash screen
+    nativePlatform.initializeAppChrome();
+
+    // 2. Subscribe to GPS tracking updates
+    const unsubscribeGps = gpsEngine.subscribe((state) => {
+      setActiveRunState(state);
+    });
+
+    // 3. Android hardware back button listener
+    const removeBackButton = nativePlatform.setupBackButtonListener({
+      hasActiveRun: () => {
+        const s = gpsEngine.getState();
+        return s.isActive && !s.isPaused;
+      },
+      onActiveRunBackAttempt: () => {
+        // Direct runner to tracker screen to view confirmation modal
+        setCurrentTab('track');
+        setAuthView(null);
+      },
+      canGoBackHistory: () => {
+        return (
+          showAuthModal ||
+          showNotificationsModal ||
+          authView !== null ||
+          selectedClubId !== null ||
+          (currentTab !== 'home' && currentTab !== 'landing')
+        );
+      },
+      onGoBackHistory: () => {
+        if (showAuthModal) {
+          setShowAuthModal(false);
+          return;
+        }
+        if (showNotificationsModal) {
+          setShowNotificationsModal(false);
+          return;
+        }
+        if (authView !== null) {
+          setAuthView(null);
+          return;
+        }
+        if (selectedClubId !== null) {
+          setSelectedClubId(null);
+          setCurrentTab('clubs');
+          return;
+        }
+        if (currentTab !== 'home') {
+          setCurrentTab(currentUser ? 'home' : 'landing');
+          return;
+        }
+      },
+    });
+
+    return () => {
+      unsubscribeGps();
+      removeBackButton();
+    };
+  }, [currentUser, currentTab, selectedClubId, authView, showAuthModal, showNotificationsModal]);
 
   // Sync state whenever active user changes
   const refreshUserData = () => {
@@ -217,6 +281,34 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* Persistent Floating Active Run Banner when navigating other screens during active run */}
+      {activeRunState.isActive && currentTab !== 'track' && (
+        <div className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between shadow-lg border-b border-[#72D600]/40 sticky top-16 z-30">
+          <div className="flex items-center gap-2.5 text-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#72D600] animate-pulse" />
+            <span className="font-bold text-[#72D600]">RUN IN PROGRESS:</span>
+            <span className="font-display font-extrabold text-white font-mono tabular-nums">
+              {activeRunState.distanceKm.toFixed(2)} KM
+            </span>
+            <span className="text-slate-400 font-mono text-[11px]">
+              ({formatDuration(activeRunState.durationSeconds)})
+            </span>
+            {activeRunState.isPaused && (
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
+                PAUSED
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => handleTabChange('track')}
+            className="px-3 py-1.5 rounded-xl bg-[#72D600] hover:bg-[#65C800] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+          >
+            <span>Return to Tracker</span>
+          </button>
+        </div>
+      )}
 
       {/* Main View Area */}
       <main className="flex-1 w-full">

@@ -10,9 +10,14 @@ import {
   RotateCcw, 
   Activity as ActivityIcon,
   ChevronLeft,
-  Info
+  Info,
+  ShieldAlert,
+  Smartphone,
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react';
 import { gpsEngine, RunTrackerState, formatDuration, formatPace } from '../../services/gps';
+import { nativePlatform } from '../../services/nativePlatform';
 import { LeafletRouteMap } from './LeafletRouteMap';
 import { RunCompletionModal } from './RunCompletionModal';
 import { User } from '../../types';
@@ -30,9 +35,11 @@ export const LiveTracker: React.FC<LiveTrackerProps> = ({
 }) => {
   const [state, setState] = useState<RunTrackerState>(gpsEngine.getState());
   const [confirmFinish, setConfirmFinish] = useState(false);
+  const [showActiveRunProtection, setShowActiveRunProtection] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [savedRunData, setSavedRunData] = useState<RunTrackerState | null>(null);
   const [simMode, setSimMode] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
 
   useEffect(() => {
     const unsubscribe = gpsEngine.subscribe((newState) => {
@@ -42,7 +49,20 @@ export const LiveTracker: React.FC<LiveTrackerProps> = ({
     // Check GPS permissions when tracker opens
     gpsEngine.checkGPSAvailability();
 
-    return () => unsubscribe();
+    // Prevent accidental page reload or closing while a run is active
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (gpsEngine.getState().isActive) {
+        e.preventDefault();
+        e.returnValue = 'You have an active run in progress. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   const handleStart = (simulated: boolean = false) => {
@@ -56,6 +76,21 @@ export const LiveTracker: React.FC<LiveTrackerProps> = ({
 
   const handleResume = () => {
     gpsEngine.resumeRun();
+  };
+
+  const handleBackAttempt = () => {
+    if (state.isActive) {
+      setShowActiveRunProtection(true);
+    } else {
+      onBackToDashboard();
+    }
+  };
+
+  const handleRequestPermission = async () => {
+    setIsRequestingPermission(true);
+    await nativePlatform.requestLocationPermissions();
+    await gpsEngine.checkGPSAvailability();
+    setIsRequestingPermission(false);
   };
 
   const handleFinishPrompt = () => {
@@ -104,9 +139,8 @@ export const LiveTracker: React.FC<LiveTrackerProps> = ({
       {/* Header bar */}
       <div className="flex items-center justify-between py-2 mb-2">
         <button
-          onClick={onBackToDashboard}
-          disabled={state.isActive && !state.isPaused}
-          className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1.5 rounded-lg hover:bg-slate-100"
+          onClick={handleBackAttempt}
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-950 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
           <span>Dashboard</span>
@@ -127,6 +161,57 @@ export const LiveTracker: React.FC<LiveTrackerProps> = ({
           )}
         </div>
       </div>
+
+      {/* Background Run Tracking Indicator */}
+      {state.isActive && !state.isPaused && (
+        <div className="mb-3 px-3.5 py-2.5 rounded-2xl bg-slate-900 text-white flex items-center justify-between text-xs border border-slate-800 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-[#72D600] shrink-0" />
+            <div>
+              <span className="font-bold text-[#72D600]">Background Tracking Active:</span>{' '}
+              <span className="text-slate-300">You can safely lock your screen or switch apps.</span>
+            </div>
+          </div>
+          <span className="text-[10px] font-mono bg-emerald-950 text-[#72D600] border border-emerald-800 px-2 py-0.5 rounded-full font-bold">
+            TRACKING
+          </span>
+        </div>
+      )}
+
+      {/* Location Permission Alert */}
+      {(state.status === 'denied' || state.status === 'unavailable') && (
+        <div className="mb-4 p-4 rounded-3xl bg-rose-50 border border-rose-200 text-rose-950 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center shrink-0 text-rose-600 mt-0.5">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-bold text-sm text-rose-900">Location Permission Required</h4>
+              <p className="text-xs text-rose-700 mt-1 leading-relaxed">
+                RunFam uses your location to track your running route, distance, and pace. Please allow location access in your device/browser settings, or test instantly with the Sambhajinagar Live Simulator.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleRequestPermission}
+              disabled={isRequestingPermission}
+              className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRequestingPermission ? 'animate-spin' : ''}`} />
+              <span>Grant Location Permission</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStart(true)}
+              className="px-3.5 py-2 rounded-xl bg-white hover:bg-rose-100/80 text-rose-800 text-xs font-bold border border-rose-300 transition-colors"
+            >
+              Test in Sambhajinagar Simulator
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Weak GPS Alert */}
       {state.status === 'weak' && (
@@ -298,6 +383,64 @@ export const LiveTracker: React.FC<LiveTrackerProps> = ({
         </div>
 
       </div>
+
+      {/* Active Run Protection Modal */}
+      {showActiveRunProtection && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center border border-slate-100">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-display font-black text-slate-900">Run In Progress</h3>
+            <p className="text-xs text-slate-600 mt-2">
+              You are actively tracking a run (<strong className="text-slate-900">{state.distanceKm.toFixed(2)} KM</strong> in {formatDuration(state.durationSeconds)}). What would you like to do?
+            </p>
+
+            <div className="mt-5 space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowActiveRunProtection(false)}
+                className="w-full py-3 rounded-xl bg-[#72D600] text-slate-950 font-black text-sm hover:bg-[#65C800] transition-colors"
+              >
+                Keep Tracking Run
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowActiveRunProtection(false);
+                  onBackToDashboard();
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-800 font-bold text-xs hover:bg-slate-200 transition-colors"
+              >
+                Keep Running in Background & Leave
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowActiveRunProtection(false);
+                  completeRun();
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors"
+              >
+                Finish & Submit Run
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowActiveRunProtection(false);
+                  handleDiscard();
+                }}
+                className="w-full py-2 text-rose-600 text-xs font-semibold hover:underline"
+              >
+                Discard Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Finish Modal */}
       {confirmFinish && (

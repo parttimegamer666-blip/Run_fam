@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.28"
+        android:scaleY="0.28"
+        android:translateX="22"
+        android:translateY="20">
+        <!-- Runner Head -->
+        <path
+            android:fillColor="#72D600"
+            android:pathData="M150,40m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0" />
+        <!-- Runner Arm -->
+        <path
+            android:fillColor="#72D600"
+            android:pathData="M166,90C180,90 198,100 198,107C198,114 180,122 166,122Z" />
+        <!-- Runner Torso -->
+        <path
+            android:fillColor="#72D600"
+            android:pathData="M40,64L115,64C140,64 162,82 162,108C162,132 140,150 115,150L92,150C85,150 82,155 85,162L102,162C134,162 170,134 170,102C170,66 134,44 96,44L32,44C18,44 26,64 40,64Z" />
+        <!-- Front Leg Stride -->
+        <path
+            android:fillColor="#72D600"
+            android:pathData="M94,76L12,192C2,206 14,216 30,216L46,216L124,102Z" />
+        <!-- Back Leg -->
+        <path
+            android:fillColor="#72D600"
+            android:pathData="M92,154C82,154 78,162 86,170L114,200C122,208 118,218 102,224L80,224C104,234 132,220 138,204L118,174C110,162 104,154 92,154Z" />
+    </group>
+</vector>

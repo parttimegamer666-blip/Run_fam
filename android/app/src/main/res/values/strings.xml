@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RunFam</string>
+    <string name="title_activity_main">RunFam</string>
+    <string name="package_name">com.runfam.app</string>
+    <string name="custom_url">com.runfam.app</string>
+    <string name="app_tagline">Your Run. Your Crew. Your City.</string>
+</resources>
